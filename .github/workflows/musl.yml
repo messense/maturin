@@ -20,7 +20,9 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Build
-        run: cargo run -- build -b bin --no-sdist -o dist
+        run: |
+          rustup target add x86_64-unknown-linux-musl
+          cargo run --target x86_64-unknown-linux-musl -- build -b bin --no-sdist -o dist
       - name: Upload wheels
         uses: actions/upload-artifact@v2
         with:
