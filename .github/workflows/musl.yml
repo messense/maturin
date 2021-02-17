@@ -22,7 +22,7 @@ jobs:
       - name: Build
         run: |
           sudo python3 -m pip install maturin
-          maturin build -b bin --no-sdist -o dist --target aarch64-unknown-linux-musl
+          maturin build -b bin --no-sdist -o dist --target aarch64-unknown-linux-musl --manylinux 2014 --release
       - name: Upload wheels
         uses: actions/upload-artifact@v2
         with:
