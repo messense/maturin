@@ -21,7 +21,8 @@ jobs:
       - uses: actions/checkout@v2
       - name: Build
         run: |
-          python3 setup.py bdist_wheel
+          python3 -m pip install maturin
+          python3 -m maturin build -b bin --no-sdist -o dist
       - name: Upload wheels
         uses: actions/upload-artifact@v2
         with:
