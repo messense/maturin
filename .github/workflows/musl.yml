@@ -1,0 +1,28 @@
+name: Cross Build
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  build-linux-cross:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [ aarch64-musl ]
+    container:
+      image: docker://benfred/rust-musl-cross:${{ matrix.target }}
+      env:
+        RUSTUP_HOME: /root/.rustup
+        CARGO_HOME: /root/.cargo
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build
+        run: cargo run -- build -b bin --no-sdist -o dist
+      - name: Upload wheels
+        uses: actions/upload-artifact@v2
+        with:
+          name: wheels
+          path: dist
