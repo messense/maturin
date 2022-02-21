@@ -68,9 +68,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.49"
+version = "1.0.54"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a03e93e97a28fbc9f42fbc5ba0886a3c67eb637b476dbee711f80a6ffe8223d"
+checksum = "7a99269dff3bc004caa411f38845c20303f1e393ca2bd6581576fa3a7f59577d"
 
 [[package]]
 name = "async-io"
