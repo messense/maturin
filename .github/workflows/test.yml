@@ -417,3 +417,40 @@ jobs:
           key: maturin-${{ runner.os }}-msrv
       - name: cargo build
         run: cargo build --all
+
+  test-freebsd:
+    name: Test FreeBSD
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Cache cargo build
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: freebsd-maturin-${{ hashFiles('Cargo.lock') }}
+      - name: Cache test crates cargo build
+        uses: actions/cache@v2
+        with:
+          path: test-crates/*/target
+          key: freebsd-test-crates-${{ hashFiles('test-crates/*/Cargo.lock') }}
+      - name: cargo test
+        uses: vmactions/freebsd-vm@v0
+        with:
+          usesh: true
+          prepare: |
+            pkg install -y curl bash python
+          run: |
+            set -euo pipefail
+
+            export RUST_BACKTRACE=1
+            export TOOLCHAIN=stable
+
+            curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain $TOOLCHAIN
+            python -m ensurepip
+            python -m pip install --upgrade cffi virtualenv
+
+            $HOME/.cargo/bin/rustup run $TOOLCHAIN cargo build
+            $HOME/.cargo/bin/rustup run $TOOLCHAIN cargo test
