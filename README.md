@@ -198,6 +198,26 @@ To include arbitrary files in the sdist for use during compilation specify `incl
 include = [{ path = "path/**/*", format = "sdist" }]
 ```
 
+## Hatch build hook (experimental)
+
+You can use maturin as a Hatch build hook while keeping `hatchling` as the build backend. The hook builds native artifacts and injects them into Hatch's wheel/sdist build steps.
+
+```toml
+[build-system]
+requires = ["hatchling", "maturin"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.hooks.maturin]
+bindings = "pyo3"
+```
+
+**Supported options:** bindings, manifest-path, features, profile, compatibility, interpreter, target, zig, strip.
+
+**Limitations:**
+- Auditwheel is always skipped (for manylinux compliance, use `maturin build` directly)
+- WASI binaries are not supported
+- Cross-compilation requires manual target specification
+
 There's a `maturin sdist` command for only building a source distribution as workaround for [pypa/pip#6041](https://github.com/pypa/pip/issues/6041).
 
 ## Manylinux and auditwheel

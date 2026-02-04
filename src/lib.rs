@@ -32,6 +32,9 @@ pub use crate::compression::{CompressionMethod, CompressionOptions};
 pub use crate::develop::{DevelopOptions, develop};
 #[cfg(feature = "schemars")]
 pub use crate::generate_json_schema::{GenerateJsonSchemaOptions, Mode, generate_json_schema};
+#[cfg(feature = "hatch")]
+#[doc(hidden)]
+pub use crate::hatch::{BuildArtifactsOutput, SdistAugmentOutput, build_artifacts, sdist_augment};
 pub use crate::metadata::{Metadata24, WheelMetadata};
 pub use crate::module_writer::{
     ModuleWriter, PathWriter, SDistWriter, VirtualWriter, WheelWriter, write_dist_info,
@@ -61,6 +64,8 @@ mod compression;
 mod cross_compile;
 mod develop;
 mod generate_json_schema;
+#[cfg(feature = "hatch")]
+mod hatch;
 mod metadata;
 mod module_writer;
 #[cfg(feature = "scaffolding")]

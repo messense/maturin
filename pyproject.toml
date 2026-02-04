@@ -39,6 +39,9 @@ Issues = "https://github.com/PyO3/maturin/issues"
 Documentation = "https://maturin.rs"
 Changelog = "https://maturin.rs/changelog.html"
 
+[project.entry-points."hatch"]
+maturin = "maturin.hatch"
+
 [tool.setuptools]
 packages = ["maturin"]
 

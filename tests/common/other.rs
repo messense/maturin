@@ -1,17 +1,27 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Parser;
 use expect_test::Expect;
 use flate2::read::GzDecoder;
 use fs_err::File;
 use maturin::pyproject_toml::{SdistGenerator, ToolMaturin};
+#[cfg(feature = "hatch")]
+use maturin::sdist_augment;
 use maturin::{BuildOptions, CargoOptions, PlatformTag};
 use pretty_assertions::assert_eq;
+#[cfg(feature = "hatch")]
 use std::collections::BTreeSet;
+#[cfg(feature = "hatch")]
+use std::env;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+#[cfg(feature = "hatch")]
+use std::process::Command;
 use tar::Archive;
 use time::OffsetDateTime;
 use zip::ZipArchive;
+
+#[cfg(feature = "hatch")]
+use crate::common::create_virtualenv;
 
 fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
     fs_err::create_dir_all(dst)?;
@@ -491,4 +501,192 @@ pub fn test_unreadable_dir() -> Result<()> {
 
     wheel_result?;
     Ok(())
+}
+
+#[cfg(feature = "hatch")]
+pub fn test_sdist_augment_path_deps() -> Result<()> {
+    let output_dir = PathBuf::from("test-crates/targets/pep517_sdist_augment");
+    if output_dir.exists() {
+        fs_err::remove_dir_all(&output_dir)?;
+    }
+
+    let build_options = BuildOptions {
+        cargo: CargoOptions {
+            manifest_path: Some(PathBuf::from("test-crates/sdist_with_path_dep/Cargo.toml")),
+            quiet: true,
+            target_dir: Some(PathBuf::from(
+                "test-crates/targets/pep517_sdist_augment_target",
+            )),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let output = sdist_augment(build_options, &output_dir)?;
+    let targets = output
+        .force_include
+        .values()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+
+    for expected in [
+        "sdist_with_path_dep/Cargo.toml",
+        "some_path_dep/Cargo.toml",
+        "some_path_dep/src/lib.rs",
+        "transitive_path_dep/Cargo.toml",
+        "transitive_path_dep/src/lib.rs",
+    ] {
+        assert!(
+            targets.contains(expected),
+            "missing {expected} in sdist augment targets: {targets:?}"
+        );
+    }
+
+    Ok(())
+}
+
+#[cfg(feature = "hatch")]
+pub fn test_hatch_build_hook() -> Result<()> {
+    let temp_dir = tempfile::tempdir()?;
+    let project_dir = temp_dir.path().join("pyo3-mixed");
+    copy_dir_recursive(Path::new("test-crates/pyo3-mixed"), &project_dir)?;
+    remove_prebuilt_binaries(&project_dir)?;
+
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR")).canonicalize()?;
+    let repo_url = file_url(&repo_root);
+    let pyproject = format!(
+        r#"[build-system]
+requires = ["hatchling", "maturin @ {repo_url}"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pyo3-mixed"
+version = "2.1.5"
+classifiers = ["Programming Language :: Python", "Programming Language :: Rust"]
+requires-python = ">=3.7"
+dependencies = ["boltons"]
+license = "MIT"
+
+[project.scripts]
+get_42 = "pyo3_mixed:get_42"
+print_cli_args = "pyo3_mixed:print_cli_args"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pyo3_mixed"]
+
+[tool.hatch.build.hooks.maturin]
+bindings = "pyo3"
+"#,
+    );
+    fs_err::write(project_dir.join("pyproject.toml"), pyproject)?;
+
+    let unique_name = temp_dir
+        .path()
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| "hatch-build-hook".to_string());
+    let (_venv_dir, python) = create_virtualenv(&format!("hatch-build-{unique_name}"), None)?;
+
+    let output = Command::new(&python)
+        .args([
+            "-m",
+            "pip",
+            "--disable-pip-version-check",
+            "--no-cache-dir",
+            "install",
+            "hatch",
+            "hatchling",
+        ])
+        .output()
+        .context("Failed to install hatch into virtualenv")?;
+    if !output.status.success() {
+        bail!(
+            "Failed to install hatch: {}\n---stdout:\n{}\n---stderr:\n{}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    let python_dir = python
+        .parent()
+        .context("Missing virtualenv bin directory")?;
+    let old_path = env::var_os("PATH").unwrap_or_default();
+    let mut paths = env::split_paths(&old_path).collect::<Vec<_>>();
+    paths.insert(0, python_dir.to_path_buf());
+    let new_path = env::join_paths(paths).context("Failed to update PATH for hatch")?;
+
+    let hatch_data_dir = temp_dir.path().join("hatch-data");
+    let hatch_cache_dir = temp_dir.path().join("hatch-cache");
+    let output = Command::new("hatch")
+        .current_dir(&project_dir)
+        .args(["build", "-t", "sdist", "-t", "wheel"])
+        .env("PATH", new_path)
+        .env("HATCH_DATA_DIR", &hatch_data_dir)
+        .env("HATCH_CACHE_DIR", &hatch_cache_dir)
+        .output()
+        .context("Failed to invoke hatch build")?;
+    if !output.status.success() {
+        bail!(
+            "Hatch build failed: {}\n---stdout:\n{}\n---stderr:\n{}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    let dist_dir = project_dir.join("dist");
+    let mut wheel_path = None;
+    let mut sdist_path = None;
+    for entry in fs_err::read_dir(&dist_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
+            if name.ends_with(".whl") {
+                wheel_path = Some(path);
+            } else if name.ends_with(".tar.gz") {
+                sdist_path = Some(path);
+            }
+        }
+    }
+
+    let wheel_path = wheel_path.context("Missing wheel output from hatch build")?;
+    let _sdist_path = sdist_path.context("Missing sdist output from hatch build")?;
+
+    let mut wheel = ZipArchive::new(File::open(&wheel_path)?)?;
+    let has_extension = (0..wheel.len()).any(|idx| {
+        wheel.by_index(idx).map_or(false, |entry| {
+            let name = entry.name();
+            name.contains("pyo3_mixed")
+                && matches!(
+                    Path::new(name).extension().and_then(|e| e.to_str()),
+                    Some("so" | "pyd" | "dll" | "dylib")
+                )
+        })
+    });
+    assert!(has_extension, "Wheel missing extension module");
+
+    Ok(())
+}
+
+#[cfg(feature = "hatch")]
+fn remove_prebuilt_binaries(root: &Path) -> Result<()> {
+    for entry in fs_err::read_dir(root)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            remove_prebuilt_binaries(&path)?;
+        } else if matches!(
+            path.extension().and_then(|ext| ext.to_str()),
+            Some("so" | "pyd" | "dll" | "dylib")
+        ) {
+            fs_err::remove_file(&path)?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(feature = "hatch")]
+fn file_url(path: &Path) -> String {
+    url::Url::from_file_path(path).unwrap().to_string()
 }

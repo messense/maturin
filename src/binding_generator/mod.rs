@@ -66,15 +66,15 @@ impl ArtifactTarget {
 pub(crate) struct GeneratorOutput {
     /// The path, relative to the archive root, where the built artifact/module
     /// should be installed
-    artifact_target: ArtifactTarget,
+    pub(crate) artifact_target: ArtifactTarget,
 
     /// In some cases, the source path of the artifact is altered
     /// (e.g. when the build output is an archive which needs to be unpacked)
-    artifact_source_override: Option<PathBuf>,
+    pub(crate) artifact_source_override: Option<PathBuf>,
 
     /// Additional files to be installed (e.g. __init__.py)
     /// The provided PathBuf should be relative to the archive root
-    additional_files: Option<HashMap<PathBuf, ArchiveSource>>,
+    pub(crate) additional_files: Option<HashMap<PathBuf, ArchiveSource>>,
 }
 
 /// Every binding generator ultimately has to install the following:

@@ -21,6 +21,8 @@ use maturin::{GenerateJsonSchemaOptions, generate_json_schema};
 use maturin::{GenerateProjectOptions, ci::GenerateCI, init_project, new_project};
 #[cfg(feature = "upload")]
 use maturin::{PublishOpt, upload_ui};
+#[cfg(feature = "hatch")]
+use maturin::{build_artifacts, sdist_augment};
 use std::env;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -203,6 +205,19 @@ enum Pep517Command {
         #[arg(long)]
         editable: bool,
     },
+    /// Build native artifacts and return paths for the hatch build hook
+    #[cfg(feature = "hatch")]
+    #[command(name = "build-artifacts")]
+    BuildArtifacts {
+        #[command(flatten)]
+        build_options: BuildOptions,
+        /// Strip the library for minimum file size
+        #[arg(long)]
+        strip: bool,
+        /// Directory to store generated files
+        #[arg(long = "output-dir")]
+        output_dir: PathBuf,
+    },
     /// The implementation of build_sdist
     #[command(name = "write-sdist")]
     WriteSDist {
@@ -212,6 +227,16 @@ enum Pep517Command {
         #[arg(short = 'm', long = "manifest-path", value_name = "PATH")]
         /// The path to the Cargo.toml
         manifest_path: Option<PathBuf>,
+    },
+    /// Return extra files to include in a hatch sdist build
+    #[cfg(feature = "hatch")]
+    #[command(name = "sdist-augment")]
+    SdistAugment {
+        #[command(flatten)]
+        build_options: BuildOptions,
+        /// Directory to store generated files
+        #[arg(long = "output-dir")]
+        output_dir: PathBuf,
     },
 }
 
@@ -312,6 +337,15 @@ fn pep517(subcommand: Pep517Command) -> Result<()> {
             assert_eq!(wheels.len(), 1);
             println!("{}", wheels[0].0.to_str().unwrap());
         }
+        #[cfg(feature = "hatch")]
+        Pep517Command::BuildArtifacts {
+            build_options,
+            strip,
+            output_dir,
+        } => {
+            let output = build_artifacts(build_options, &output_dir, strip)?;
+            println!("{}", serde_json::to_string(&output)?);
+        }
         Pep517Command::WriteSDist {
             sdist_directory,
             manifest_path,
@@ -337,6 +371,14 @@ fn pep517(subcommand: Pep517Command) -> Result<()> {
                 .build_source_distribution()?
                 .context("Failed to build source distribution, pyproject.toml not found")?;
             println!("{}", path.file_name().unwrap().to_str().unwrap());
+        }
+        #[cfg(feature = "hatch")]
+        Pep517Command::SdistAugment {
+            build_options,
+            output_dir,
+        } => {
+            let output = sdist_augment(build_options, &output_dir)?;
+            println!("{}", serde_json::to_string(&output)?);
         }
     };
 

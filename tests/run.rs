@@ -629,6 +629,19 @@ fn workspace_cargo_lock() {
 }
 
 #[test]
+#[serial(hatch_build)]
+#[cfg(feature = "hatch")]
+fn hatch_build_hook() {
+    handle_result(other::test_hatch_build_hook())
+}
+
+#[test]
+#[cfg(feature = "hatch")]
+fn pep517_sdist_augment_path_deps() {
+    handle_result(other::test_sdist_augment_path_deps())
+}
+
+#[test]
 fn workspace_members_beneath_pyproject_sdist() {
     let cargo_toml = expect![[r#"
         [workspace]

@@ -28,11 +28,11 @@ use tracing::{debug, trace, warn};
 #[derive(Debug, Clone)]
 pub struct PathDependency {
     /// `Cargo.toml` path of the path dependency
-    manifest_path: PathBuf,
+    pub(crate) manifest_path: PathBuf,
     /// workspace root of the path dependency
-    workspace_root: PathBuf,
+    pub(crate) workspace_root: PathBuf,
     /// readme path of the path dependency
-    readme: Option<PathBuf>,
+    pub(crate) readme: Option<PathBuf>,
 }
 
 fn parse_toml_file(path: &Path, kind: &str) -> Result<toml_edit::DocumentMut> {

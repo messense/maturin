@@ -198,6 +198,9 @@ xwin = ["cargo-xwin", "xz2"]
 # project scaffolding
 scaffolding = ["dialoguer", "console", "minijinja", "unicode-xid"]
 
+# hatch build hook support (only needed when building as a Python package)
+hatch = []
+
 # static linking dependencies
 static = ["xz2/static"]
 
